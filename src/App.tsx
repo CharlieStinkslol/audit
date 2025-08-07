@@ -3,9 +3,13 @@ import { Search, BarChart3, FileText, Settings, Moon, Sun, Download, AlertCircle
 import { TechnicalSEOAnalyzer, TechnicalSEOResult } from './utils/technicalSeoAnalyzer';
 import { QuickWinsAnalyzer, QuickWinsResult } from './utils/quickWinsAnalyzer';
 import { BlogContentAnalyzer, BlogContentResult } from './utils/blogContentAnalyzer';
+import { PageSpeedAnalyzer, PageSpeedResult } from './utils/pageSpeedAnalyzer';
+import { SiteAnalyzer, SiteAnalysisResult } from './utils/siteAnalyzer';
 import TechnicalSEOResults from './components/TechnicalSEOResults';
 import QuickWinsResults from './components/QuickWinsResults';
 import BlogContentResults from './components/BlogContentResults';
+import PageSpeedResults from './components/PageSpeedResults';
+import SiteAnalysisResults from './components/SiteAnalysisResults';
 
 interface TechnicalAuditResult extends TechnicalSEOResult {
   id: string;
@@ -19,21 +23,35 @@ interface BlogContentAuditResult extends BlogContentResult {
   id: string;
 }
 
+interface PageSpeedAuditResult extends PageSpeedResult {
+  id: string;
+}
+
+interface SiteAnalysisAuditResult extends SiteAnalysisResult {
+  id: string;
+}
+
 function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
   const [technicalResults, setTechnicalResults] = useState<TechnicalAuditResult[]>([]);
   const [quickWinsResults, setQuickWinsResults] = useState<QuickWinsAuditResult[]>([]);
   const [blogContentResults, setBlogContentResults] = useState<BlogContentAuditResult[]>([]);
+  const [pageSpeedResults, setPageSpeedResults] = useState<PageSpeedAuditResult[]>([]);
+  const [siteAnalysisResults, setSiteAnalysisResults] = useState<SiteAnalysisAuditResult[]>([]);
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditUrl, setAuditUrl] = useState('');
   const [currentTechnicalResult, setCurrentTechnicalResult] = useState<TechnicalAuditResult | null>(null);
   const [currentQuickWinsResult, setCurrentQuickWinsResult] = useState<QuickWinsAuditResult | null>(null);
   const [currentBlogContentResult, setCurrentBlogContentResult] = useState<BlogContentAuditResult | null>(null);
+  const [currentPageSpeedResult, setCurrentPageSpeedResult] = useState<PageSpeedAuditResult | null>(null);
+  const [currentSiteAnalysisResult, setCurrentSiteAnalysisResult] = useState<SiteAnalysisAuditResult | null>(null);
   
   const technicalAnalyzer = new TechnicalSEOAnalyzer();
   const quickWinsAnalyzer = new QuickWinsAnalyzer();
   const blogContentAnalyzer = new BlogContentAnalyzer();
+  const pageSpeedAnalyzer = new PageSpeedAnalyzer();
+  const siteAnalyzer = new SiteAnalyzer();
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -114,6 +132,56 @@ function App() {
     }
   };
 
+  const runPageSpeedAudit = async (url: string) => {
+    setIsAuditing(true);
+    setCurrentPageSpeedResult(null);
+    
+    try {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      const result = await pageSpeedAnalyzer.analyzePage(url);
+      const auditResult: PageSpeedAuditResult = {
+        ...result,
+        id: Date.now().toString()
+      };
+      
+      setPageSpeedResults(prev => [auditResult, ...prev]);
+      setCurrentPageSpeedResult(auditResult);
+      setCurrentView('page-speed-results');
+    } catch (error) {
+      console.error('Page speed audit failed:', error);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  const runSiteAnalysisAudit = async (url: string) => {
+    setIsAuditing(true);
+    setCurrentSiteAnalysisResult(null);
+    
+    try {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      const result = await siteAnalyzer.analyzeSite(url);
+      const auditResult: SiteAnalysisAuditResult = {
+        ...result,
+        id: Date.now().toString()
+      };
+      
+      setSiteAnalysisResults(prev => [auditResult, ...prev]);
+      setCurrentSiteAnalysisResult(auditResult);
+      setCurrentView('site-analysis-results');
+    } catch (error) {
+      console.error('Site analysis audit failed:', error);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
   const downloadQuickWinsCSV = () => {
     if (!currentQuickWinsResult) return;
     
@@ -189,7 +257,7 @@ function App() {
           title="Page Speed"
           description="Performance analysis and optimization recommendations"
           icon={Zap}
-          onClick={() => setCurrentView('speed-audit')}
+          onClick={() => setCurrentView('page-speed-audit')}
           color="orange"
         />
         <AuditCard
@@ -219,7 +287,7 @@ function App() {
         <div className="mt-12">
           <h2 className={`text-2xl font-bold text-gray-900 ${darkMode ? 'dark:text-white' : ''} mb-6`}>Charlie's Recent Audits</h2>
           <div className="grid gap-4">
-            {[...technicalResults, ...quickWinsResults, ...blogContentResults]
+            {[...technicalResults, ...quickWinsResults, ...blogContentResults, ...pageSpeedResults, ...siteAnalysisResults]
               .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
               .slice(0, 3)
               .map((result) => (
@@ -238,6 +306,8 @@ function App() {
                   <span>
                     {'quickWins' in result ? `${result.quickWins.length} quick wins` : 
                      'posts' in result ? `${result.scannedPosts} posts scanned` :
+                     'coreWebVitals' in result ? `${result.actionableItems.length} performance issues` :
+                     'crawlability' in result ? `${result.actionableItems.length} crawl issues` :
                      `${result.issues.length} issues found`}
                   </span>
                   <span>{new Date(result.timestamp).toLocaleDateString()}</span>
@@ -460,12 +530,12 @@ function App() {
             onSubmit={runBlogContentAudit} 
           />
         );
-      case 'speed-audit':
+      case 'page-speed-audit':
         return (
           <AuditForm 
             title="Page Speed Audit" 
             description="Performance analysis and optimization recommendations"
-            onSubmit={(url) => runTechnicalAudit(url)} 
+            onSubmit={runPageSpeedAudit} 
           />
         );
       case 'site-analysis':
@@ -473,7 +543,7 @@ function App() {
           <AuditForm 
             title="Site Analysis" 
             description="Robots.txt, sitemap, and crawl status verification"
-            onSubmit={(url) => runTechnicalAudit(url)} 
+            onSubmit={runSiteAnalysisAudit} 
           />
         );
       case 'technical-results':
@@ -482,6 +552,10 @@ function App() {
         return currentQuickWinsResult ? <QuickWinsResults result={currentQuickWinsResult} darkMode={darkMode} onDownloadCSV={downloadQuickWinsCSV} /> : <Dashboard />;
       case 'blog-content-results':
         return currentBlogContentResult ? <BlogContentResults result={currentBlogContentResult} darkMode={darkMode} /> : <Dashboard />;
+      case 'page-speed-results':
+        return currentPageSpeedResult ? <PageSpeedResults result={currentPageSpeedResult} darkMode={darkMode} /> : <Dashboard />;
+      case 'site-analysis-results':
+        return currentSiteAnalysisResult ? <SiteAnalysisResults result={currentSiteAnalysisResult} darkMode={darkMode} /> : <Dashboard />;
       case 'reports':
         return <Reports />;
       case 'changelog':
